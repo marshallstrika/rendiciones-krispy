@@ -32,6 +32,7 @@ class ReportePDF(FPDF):
         self.set_y(-15); self.set_font('Arial', 'I', 8); self.set_text_color(150, 150, 150)
         self.cell(0, 10, f'Página {self.page_no()} | Soporte Administrativo', align='R')
 
+# --- LÓGICA DE ESTADO ---
 if 'lista_montos' not in st.session_state: st.session_state.lista_montos = []
 if 'monto_reset_key' not in st.session_state: st.session_state.monto_reset_key = 0
 
@@ -72,11 +73,14 @@ with col2:
     c_gasto, f_gasto = st.columns(2)
     categoria = c_gasto.selectbox("Categoría", ["Insumos Técnicos", "Auditoría Mystery Shopper", "Logística", "Mantenimiento", "Otros"])
     fecha_gasto = f_gasto.date_input("Fecha del Gasto", datetime.now())
-    detalle = st.text_area("Justificación", placeholder="Motivo...")
+    
+    # MEJORA CELULAR: Añadimos una clave para forzar la lectura del estado
+    detalle = st.text_area("Justificación", placeholder="Motivo...", key="justificacion_input")
     fotos = st.file_uploader("Adjuntar Boletas", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
 st.divider()
 
+# Comprobamos los datos (el valor de detalle se obtiene de st.session_state.justificacion_input)
 if fotos and st.session_state.lista_montos and responsable:
     pdf = ReportePDF()
     pdf.add_page()
@@ -97,6 +101,11 @@ if fotos and st.session_state.lista_montos and responsable:
     montos_str = [f"Bol. {i+1}: ${m:,}" for i, m in enumerate(st.session_state.lista_montos)]
     pdf.multi_cell(267, 5, " | ".join(montos_str), border=0)
 
+    # Justificación técnica (usando el valor capturado)
+    pdf.ln(5); pdf.set_font('Arial', 'B', 10); pdf.set_text_color(0, 112, 74)
+    pdf.cell(0, 6, 'JUSTIFICACIÓN TÉCNICA:', ln=1)
+    pdf.set_font('Arial', '', 11); pdf.multi_cell(267, 6, detalle if detalle else "Sin descripción.", border=0)
+
     # Fotos
     for i, foto in enumerate(fotos):
         if i % 2 == 0:
@@ -114,10 +123,7 @@ if fotos and st.session_state.lista_montos and responsable:
         pdf.image(ruta, x=(15 if i % 2 == 0 else 155), y=45, w=125)
         os.remove(ruta)
 
-    # --- SOLUCIÓN AL TYPEERROR ---
-    # Usamos dest='S' para que devuelva un string de bytes compatible
     pdf_output = pdf.output(dest='S').encode('latin-1')
-    
     fecha_emision = datetime.now().strftime("%d-%m-%Y")
     nombre_archivo = f"{responsable.replace(' ', '_')}_{fecha_emision}.pdf"
     
