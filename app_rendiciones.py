@@ -32,7 +32,6 @@ class ReportePDF(FPDF):
         self.set_y(-15); self.set_font('Arial', 'I', 8); self.set_text_color(150, 150, 150)
         self.cell(0, 10, f'Página {self.page_no()} | Soporte Administrativo', align='R')
 
-# --- LÓGICA DE ESTADO ---
 if 'lista_montos' not in st.session_state: st.session_state.lista_montos = []
 if 'monto_reset_key' not in st.session_state: st.session_state.monto_reset_key = 0
 
@@ -74,18 +73,18 @@ with col2:
     categoria = c_gasto.selectbox("Categoría", ["Insumos Técnicos", "Auditoría Mystery Shopper", "Logística", "Mantenimiento", "Otros"])
     fecha_gasto = f_gasto.date_input("Fecha del Gasto", datetime.now())
     
-    # MEJORA CELULAR: Añadimos una clave para forzar la lectura del estado
-    detalle = st.text_area("Justificación", placeholder="Motivo...", key="justificacion_input")
+    # SOLUCIÓN PARA CELULAR: Usamos una clave de sesión directa
+    detalle_texto = st.text_area("Justificación", placeholder="Escribe aquí el motivo...", key="campo_justificacion")
     fotos = st.file_uploader("Adjuntar Boletas", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
 st.divider()
 
-# Comprobamos los datos (el valor de detalle se obtiene de st.session_state.justificacion_input)
+# Solo habilitamos si hay montos, fotos y nombre
 if fotos and st.session_state.lista_montos and responsable:
     pdf = ReportePDF()
     pdf.add_page()
     
-    # Resumen
+    # Bloque Resumen
     pdf.set_fill_color(245, 245, 245); pdf.rect(15, 35, 267, 25, 'F')
     pdf.set_xy(20, 38); pdf.set_font('Arial', 'B', 9); pdf.set_text_color(0, 112, 74)
     pdf.cell(89, 5, 'RESPONSABLE'); pdf.cell(89, 5, 'CATEGORÍA'); pdf.cell(89, 5, 'TOTAL ACUMULADO', ln=1)
@@ -94,19 +93,19 @@ if fotos and st.session_state.lista_montos and responsable:
     pdf.set_font('Arial', 'B', 14); pdf.set_text_color(209, 35, 42)
     pdf.cell(89, 8, f'${sum(st.session_state.lista_montos):,}', ln=1)
 
-    # Desglose
+    # Detalle de montos
     pdf.ln(12); pdf.set_font('Arial', 'B', 10); pdf.set_text_color(0, 112, 74)
     pdf.cell(0, 6, 'DESGLOSE DE MONTOS:', ln=1)
     pdf.set_font('Arial', '', 10); pdf.set_text_color(50, 50, 50)
     montos_str = [f"Bol. {i+1}: ${m:,}" for i, m in enumerate(st.session_state.lista_montos)]
     pdf.multi_cell(267, 5, " | ".join(montos_str), border=0)
 
-    # Justificación técnica (usando el valor capturado)
+    # Justificación (Captura el texto del campo_justificacion)
     pdf.ln(5); pdf.set_font('Arial', 'B', 10); pdf.set_text_color(0, 112, 74)
     pdf.cell(0, 6, 'JUSTIFICACIÓN TÉCNICA:', ln=1)
-    pdf.set_font('Arial', '', 11); pdf.multi_cell(267, 6, detalle if detalle else "Sin descripción.", border=0)
+    pdf.set_font('Arial', '', 11); pdf.multi_cell(267, 6, st.session_state.campo_justificacion if st.session_state.campo_justificacion else "Sin descripción.", border=0)
 
-    # Fotos
+    # Fotos (2 por lámina)
     for i, foto in enumerate(fotos):
         if i % 2 == 0:
             pdf.add_page()
@@ -117,21 +116,22 @@ if fotos and st.session_state.lista_montos and responsable:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             img = Image.open(foto)
             if img.mode in ("RGBA", "P"): img = img.convert("RGB")
-            img.save(tmp.name, format="JPEG", quality=85)
+            img.save(tmp.name, format="JPEG", quality=80)
             ruta = tmp.name
         
         pdf.image(ruta, x=(15 if i % 2 == 0 else 155), y=45, w=125)
         os.remove(ruta)
 
-    pdf_output = pdf.output(dest='S').encode('latin-1')
-    fecha_emision = datetime.now().strftime("%d-%m-%Y")
-    nombre_archivo = f"{responsable.replace(' ', '_')}_{fecha_emision}.pdf"
+    # Generación de archivo
+    pdf_bytes = pdf.output(dest='S').encode('latin-1')
+    fecha_hoy = datetime.now().strftime("%d-%m-%Y")
+    archivo_final = f"Rendicion_{responsable.replace(' ', '_')}_{fecha_hoy}.pdf"
     
     st.download_button(
         label="🚀 Generar y Descargar Reporte",
-        data=pdf_output,
-        file_name=nombre_archivo,
+        data=pdf_bytes,
+        file_name=archivo_final,
         mime="application/pdf"
     )
 else:
-    st.info("💡 Complete los datos para habilitar la descarga.")
+    st.info("💡 Para descargar: Ingresa tu nombre, los montos y sube las fotos de las boletas.")
