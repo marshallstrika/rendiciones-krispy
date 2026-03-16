@@ -3,6 +3,7 @@ from fpdf import FPDF
 from datetime import datetime
 import tempfile
 import os
+from PIL import Image  # Nueva librería para procesar fotos correctamente
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Rendición de Gastos", page_icon="donut", layout="wide")
@@ -17,7 +18,6 @@ class ReportePDF(FPDF):
     def __init__(self):
         super().__init__(orientation='L', unit='mm', format='A4')
         self.kk_green, self.kk_red = (0, 112, 74), (209, 35, 42)
-        self.kk_light_grey, self.kk_dark_grey = (245, 245, 245), (50, 50, 50)
         
     def header(self):
         self.set_fill_color(*self.kk_red); self.rect(0, 0, 297, 6, 'F')
@@ -79,7 +79,6 @@ with col2:
 
 st.divider()
 
-# --- PROCESO DE GENERACIÓN Y DESCARGA DIRECTA ---
 if fotos and st.session_state.lista_montos and responsable:
     pdf = ReportePDF()
     pdf.add_page()
@@ -89,12 +88,11 @@ if fotos and st.session_state.lista_montos and responsable:
     pdf.set_xy(20, 38); pdf.set_font('Arial', 'B', 9); pdf.set_text_color(*pdf.kk_green)
     pdf.cell(89, 5, 'RESPONSABLE'); pdf.cell(89, 5, 'CATEGORÍA'); pdf.cell(89, 5, 'TOTAL ACUMULADO', ln=1)
     
-    pdf.set_x(20); pdf.set_font('Arial', '', 12); pdf.set_text_color(*pdf.kk_dark_grey)
+    pdf.set_x(20); pdf.set_font('Arial', '', 12); pdf.set_text_color(50, 50, 50)
     pdf.cell(89, 8, responsable.upper()); pdf.cell(89, 8, categoria.upper())
     pdf.set_font('Arial', 'B', 14); pdf.set_text_color(*pdf.kk_red)
     pdf.cell(89, 8, f'${sum(st.session_state.lista_montos):,}', ln=1)
 
-    # DETALLE DE MONTOS
     pdf.ln(12)
     pdf.set_font('Arial', 'B', 10); pdf.set_text_color(*pdf.kk_green)
     pdf.cell(0, 6, 'DESGLOSE DE MONTOS:', ln=1)
@@ -102,13 +100,12 @@ if fotos and st.session_state.lista_montos and responsable:
     montos_str = [f"Bol. {i+1}: ${m:,}" for i, m in enumerate(st.session_state.lista_montos)]
     pdf.multi_cell(267, 5, " | ".join(montos_str), border=0)
 
-    # Justificación
     pdf.ln(5)
     pdf.set_font('Arial', 'B', 10); pdf.set_text_color(*pdf.kk_green)
     pdf.cell(0, 6, 'JUSTIFICACIÓN TÉCNICA:', ln=1)
     pdf.set_font('Arial', '', 11); pdf.multi_cell(267, 6, detalle if detalle else "Sin descripción.", border=0)
 
-    # Anexo Fotográfico (2 por lámina)
+    # Anexo Fotográfico Mejorado
     for i, foto in enumerate(fotos):
         if i % 2 == 0:
             pdf.add_page()
@@ -116,8 +113,12 @@ if fotos and st.session_state.lista_montos and responsable:
             pdf.cell(0, 10, f'ANEXO FOTOGRÁFICO - LÁMINA {(i//2) + 1}', ln=1)
             pdf.line(15, pdf.get_y(), 282, pdf.get_y())
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-            tmp.write(foto.getvalue()); ruta = tmp.name
+        # TRATAMIENTO DE IMAGEN SEGURO
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            img = Image.open(foto)
+            if img.mode in ("RGBA", "P"): img = img.convert("RGB") # Evita error de transparencia
+            img.save(tmp.name, format="JPEG", quality=85)
+            ruta = tmp.name
         
         pdf.image(ruta, x=(15 if i % 2 == 0 else 155), y=45, w=125)
         os.remove(ruta)
@@ -132,4 +133,4 @@ if fotos and st.session_state.lista_montos and responsable:
         mime="application/pdf"
     )
 else:
-    st.info("💡 Complete el nombre, cargue los montos y adjunte boletas para habilitar el botón de descarga.")
+    st.info("💡 Complete los datos para habilitar la descarga.")
